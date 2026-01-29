@@ -1,0 +1,21 @@
+[project]
+name = "ios-simulator-mcp"
+version = "0.1.0"
+description = "MCP server for iOS Simulator interaction - screenshots, UI hierarchy, tap, swipe, and more"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "Pillow>=10.0.0",
+    "fb-idb>=1.1.7",
+]
+
+[project.scripts]
+ios-simulator-mcp = "ios_simulator_mcp.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ios_simulator_mcp"]
