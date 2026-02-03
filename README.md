@@ -1,6 +1,8 @@
 # iOS Simulator MCP
 
-An MCP (Model Context Protocol) server that provides Claude Code with tools to interact with the iOS Simulator. Take screenshots, inspect UI hierarchy, tap, swipe, type, set GPS location, and more.
+An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that provides tools to interact with the iOS Simulator. Take screenshots, inspect UI hierarchy, tap, swipe, type, set GPS location, and more.
+
+Works with any MCP-compatible client, including [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Claude Desktop](https://claude.ai/download), and [others](https://modelcontextprotocol.io/clients).
 
 ## Quick Start
 
@@ -13,19 +15,13 @@ pipx ensurepath
 pipx install fb-idb --python python3.11
 
 # 2. Clone and install the MCP
-git clone <repo-url> ~/ios-simulator-mcp
+git clone https://github.com/whitesmith/ios-simulator-mcp.git ~/ios-simulator-mcp
 cd ~/ios-simulator-mcp
 uv sync
 
-# 3. Add to ~/.claude/settings.json
-# {
-#   "mcpServers": {
-#     "ios-simulator": {
-#       "command": "uv",
-#       "args": ["run", "--directory", "~/ios-simulator-mcp", "ios-simulator-mcp"]
-#     }
-#   }
-# }
+# 3. Add to Claude Code settings (see Configuration section below)
+claude mcp add ios-simulator \
+  -- uv run --directory ~/ios-simulator-mcp ios-simulator-mcp
 
 # 4. Restart Claude Code
 ```
@@ -97,33 +93,59 @@ brew install uv
 
 ## Installation
 
-Clone or download this repository, then install dependencies:
+Clone the repository and install dependencies:
 
 ```bash
-cd /path/to/ios-simulator-mcp
+git clone https://github.com/whitesmith/ios-simulator-mcp.git ~/ios-simulator-mcp
+cd ~/ios-simulator-mcp
 uv sync
 ```
 
-## Claude Code Configuration
+## Configuration
 
-Add to your Claude Code MCP settings. You can add this to either:
-- `~/.claude/settings.json` (global - recommended)
-- `.mcp.json` in your project root (project-specific)
+### Claude Code
+
+The quickest way is using the CLI:
+
+```bash
+claude mcp add ios-simulator -- uv run --directory /Users/yourname/ios-simulator-mcp ios-simulator-mcp
+```
+
+Or manually add to `~/.claude/settings.json` (global) or `.mcp.json` in your project root (project-specific):
 
 ```json
 {
   "mcpServers": {
     "ios-simulator": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/ios-simulator-mcp", "ios-simulator-mcp"]
+      "args": ["run", "--directory", "/Users/yourname/ios-simulator-mcp", "ios-simulator-mcp"]
     }
   }
 }
 ```
 
-Replace `/path/to/ios-simulator-mcp` with the actual path where you installed this project.
+Replace `/Users/yourname/ios-simulator-mcp` with the absolute path where you cloned the repository.
+
+> **Note**: Use an absolute path (e.g., `/Users/yourname/ios-simulator-mcp`), not `~`, since JSON values are not processed by a shell.
 
 Then restart Claude Code or run `/mcp` to reload MCP servers.
+
+### Claude Desktop
+
+Add to your Claude Desktop config file (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "ios-simulator": {
+      "command": "uv",
+      "args": ["run", "--directory", "/Users/yourname/ios-simulator-mcp", "ios-simulator-mcp"]
+    }
+  }
+}
+```
+
+Then restart Claude Desktop.
 
 ## Available Tools
 
@@ -179,7 +201,7 @@ Then restart Claude Code or run `/mcp` to reload MCP servers.
 
 ## Usage Examples
 
-Once configured, Claude Code can use these tools:
+Once configured, your MCP client can use these tools automatically. Here are some examples with Claude Code:
 
 ### Visual verification after implementing a feature
 
@@ -195,7 +217,7 @@ Let me fix the padding...
 
 ```
 Claude: I'll test the login flow.
-[Uses launch_app with bundle_id "com.thefreeride.rider.dev"]
+[Uses launch_app with bundle_id "com.example.myapp"]
 [Uses screenshot to see current state]
 [Uses get_ui_hierarchy to find the email field coordinates]
 [Uses tap_and_type to enter email]
@@ -284,14 +306,14 @@ pipx install fb-idb --python python3.11
 ## Development
 
 ```bash
-cd /path/to/ios-simulator-mcp
+cd ~/ios-simulator-mcp
 uv sync
 uv run ios-simulator-mcp  # runs the server directly (for testing)
 ```
 
 ## How It Works
 
-When Claude Code calls a tool:
+When the MCP client calls a tool:
 
 1. **Simulator management** (`list_simulators`, `boot_simulator`) uses `xcrun simctl`
 2. **Screenshots** use `xcrun simctl io <udid> screenshot`
@@ -313,4 +335,4 @@ The MCP automatically connects to an already-booted simulator, or boots the late
 
 ## License
 
-MIT
+[MIT](LICENSE)
