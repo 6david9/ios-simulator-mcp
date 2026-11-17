@@ -154,8 +154,11 @@ Then restart Claude Desktop.
 | Tool | Description |
 |------|-------------|
 | `list_simulators` | List all available simulators with state and UDID |
-| `boot_simulator` | Boot a simulator (auto-selects if none specified) |
-| `get_device_info` | Get info about connected simulator |
+| `list_device_udids` | JSON with `all` and `booted` UDID lists |
+| `boot_simulator` | Boot by `udid` or device name (auto-selects if none specified) |
+| `get_device_info` | Get info about selected simulator (`udid` optional) |
+
+Device tools below also accept optional `udid`. When multiple simulators are Booted, pass `udid` explicitly.
 
 ### Screenshots & UI Inspection
 
@@ -202,6 +205,14 @@ Then restart Claude Desktop.
 ## Usage Examples
 
 Once configured, your MCP client can use these tools automatically. Here are some examples with Claude Code:
+
+### Target a specific simulator
+
+```
+1. list_device_udids
+2. screenshot with udid="<Booted UDID>"
+3. tap with udid="<same UDID>", x=100, y=200
+```
 
 ### Visual verification after implementing a feature
 
@@ -260,8 +271,13 @@ which idb  # Should show ~/.local/bin/idb
 
 ### "No simulator connected"
 
-The MCP will auto-connect to a booted simulator. If none is booted, use:
+Call `list_device_udids` to see `all` and `booted` devices, then pass `udid`
+on subsequent tools (screenshot, tap, swipe, etc.).
+
+If none is booted, use:
 ```
+boot_simulator with udid="<UDID>"
+# or
 boot_simulator with device_name="iPhone 15 Pro"
 ```
 
@@ -269,6 +285,9 @@ Or boot one manually:
 ```bash
 xcrun simctl boot "iPhone 16"
 ```
+
+When multiple simulators are Booted and no `udid` is provided, tools refuse to
+guess. Pass `udid` explicitly.
 
 ### IDB connection issues
 

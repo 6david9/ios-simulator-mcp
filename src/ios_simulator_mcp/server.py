@@ -4,7 +4,6 @@ iOS Simulator MCP Server
 Exposes iOS Simulator control as MCP tools for Claude Code.
 """
 
-import os
 import json
 import logging
 from typing import Any
@@ -21,6 +20,22 @@ logger = logging.getLogger("ios-simulator-mcp")
 
 # Global simulator controller
 simulator = SimulatorController()
+
+UDID_PROPERTY = {
+    "type": "string",
+    "description": (
+        "Target simulator UDID. Prefer passing this on every device operation "
+        "when more than one simulator may be Booted. Use list_device_udids to "
+        "discover values. If omitted and exactly one simulator is Booted, that "
+        "device is used."
+    ),
+}
+
+
+def _with_udid(properties: dict[str, Any] | None = None) -> dict[str, Any]:
+    props = dict(properties or {})
+    props["udid"] = UDID_PROPERTY
+    return props
 
 
 def create_server() -> Server:
@@ -47,33 +62,61 @@ def create_server() -> Server:
                 },
             ),
             Tool(
+                name="list_device_udids",
+                description=(
+                    "Query simulator UDIDs. Returns JSON with two lists: "
+                    "`all` (every available simulator) and `booted` (currently "
+                    "Booted only). Use this before targeting a device with the "
+                    "optional `udid` argument on other tools."
+                ),
+                inputSchema={"type": "object", "properties": {}},
+            ),
+            Tool(
                 name="boot_simulator",
-                description="Boot a simulator. If no device specified, will use already booted simulator or boot the latest available iPhone",
+                description=(
+                    "Boot a simulator by UDID or device name. If neither is "
+                    "provided, uses an already Booted simulator or boots the "
+                    "latest available iPhone"
+                ),
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "device_name": {
-                            "type": "string",
-                            "description": "Optional device name to match (e.g., 'iPhone 15 Pro'). If not provided, uses booted simulator or boots latest iPhone",
+                    "properties": _with_udid(
+                        {
+                            "device_name": {
+                                "type": "string",
+                                "description": (
+                                    "Optional device name to match "
+                                    "(e.g., 'iPhone 15 Pro'). Ignored when udid is set"
+                                ),
+                            }
                         }
-                    },
+                    ),
                 },
             ),
             Tool(
                 name="get_device_info",
-                description="Get information about the currently connected simulator (name, UDID, state, iOS version)",
-                inputSchema={"type": "object", "properties": {}},
+                description="Get information about the selected simulator (name, UDID, state, iOS version)",
+                inputSchema={
+                    "type": "object",
+                    "properties": _with_udid(),
+                },
             ),
             # Screenshots and UI
             Tool(
                 name="screenshot",
                 description="Capture a screenshot of the simulator. Returns the image for visual inspection of the current UI state",
-                inputSchema={"type": "object", "properties": {}},
+                inputSchema={
+                    "type": "object",
+                    "properties": _with_udid(),
+                },
             ),
             Tool(
                 name="get_ui_hierarchy",
                 description="Get the UI element hierarchy showing all visible elements with their types, labels, positions (frame: x, y, width, height), and accessibility info. Use this to find element coordinates for tap/swipe actions",
-                inputSchema={"type": "object", "properties": {}},
+                inputSchema={
+                    "type": "object",
+                    "properties": _with_udid(),
+                },
             ),
             # Interactions
             Tool(
@@ -81,10 +124,12 @@ def create_server() -> Server:
                 description="Tap at specific screen coordinates. Use get_ui_hierarchy to find element positions first",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "x": {"type": "number", "description": "X coordinate to tap"},
-                        "y": {"type": "number", "description": "Y coordinate to tap"},
-                    },
+                    "properties": _with_udid(
+                        {
+                            "x": {"type": "number", "description": "X coordinate to tap"},
+                            "y": {"type": "number", "description": "Y coordinate to tap"},
+                        }
+                    ),
                     "required": ["x", "y"],
                 },
             ),
@@ -93,15 +138,17 @@ def create_server() -> Server:
                 description="Long press at specific coordinates for a duration",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "x": {"type": "number", "description": "X coordinate"},
-                        "y": {"type": "number", "description": "Y coordinate"},
-                        "duration": {
-                            "type": "number",
-                            "description": "Duration in seconds (default: 1.0)",
-                            "default": 1.0,
-                        },
-                    },
+                    "properties": _with_udid(
+                        {
+                            "x": {"type": "number", "description": "X coordinate"},
+                            "y": {"type": "number", "description": "Y coordinate"},
+                            "duration": {
+                                "type": "number",
+                                "description": "Duration in seconds (default: 1.0)",
+                                "default": 1.0,
+                            },
+                        }
+                    ),
                     "required": ["x", "y"],
                 },
             ),
@@ -110,17 +157,19 @@ def create_server() -> Server:
                 description="Swipe from one point to another. Useful for scrolling (swipe up to scroll down) or dismissing elements",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "x_start": {"type": "number", "description": "Starting X coordinate"},
-                        "y_start": {"type": "number", "description": "Starting Y coordinate"},
-                        "x_end": {"type": "number", "description": "Ending X coordinate"},
-                        "y_end": {"type": "number", "description": "Ending Y coordinate"},
-                        "duration": {
-                            "type": "number",
-                            "description": "Swipe duration in seconds (default: 0.5)",
-                            "default": 0.5,
-                        },
-                    },
+                    "properties": _with_udid(
+                        {
+                            "x_start": {"type": "number", "description": "Starting X coordinate"},
+                            "y_start": {"type": "number", "description": "Starting Y coordinate"},
+                            "x_end": {"type": "number", "description": "Ending X coordinate"},
+                            "y_end": {"type": "number", "description": "Ending Y coordinate"},
+                            "duration": {
+                                "type": "number",
+                                "description": "Swipe duration in seconds (default: 0.5)",
+                                "default": 0.5,
+                            },
+                        }
+                    ),
                     "required": ["x_start", "y_start", "x_end", "y_end"],
                 },
             ),
@@ -129,9 +178,11 @@ def create_server() -> Server:
                 description="Type text into the currently focused text field. Make sure a text field is focused first (tap on it)",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "text": {"type": "string", "description": "Text to type"},
-                    },
+                    "properties": _with_udid(
+                        {
+                            "text": {"type": "string", "description": "Text to type"},
+                        }
+                    ),
                     "required": ["text"],
                 },
             ),
@@ -140,11 +191,13 @@ def create_server() -> Server:
                 description="Tap on a text field to focus it, then type text. Combines tap + type_text in one action",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "x": {"type": "number", "description": "X coordinate of the text field"},
-                        "y": {"type": "number", "description": "Y coordinate of the text field"},
-                        "text": {"type": "string", "description": "Text to type"},
-                    },
+                    "properties": _with_udid(
+                        {
+                            "x": {"type": "number", "description": "X coordinate of the text field"},
+                            "y": {"type": "number", "description": "Y coordinate of the text field"},
+                            "text": {"type": "string", "description": "Text to type"},
+                        }
+                    ),
                     "required": ["x", "y", "text"],
                 },
             ),
@@ -153,20 +206,32 @@ def create_server() -> Server:
                 description="Press a hardware button on the simulator",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "button": {
-                            "type": "string",
-                            "description": "Button to press: home, lock, siri, volume_up, volume_down, apple_pay",
-                            "enum": ["home", "lock", "siri", "volume_up", "volume_down", "apple_pay"],
-                        },
-                    },
+                    "properties": _with_udid(
+                        {
+                            "button": {
+                                "type": "string",
+                                "description": "Button to press: home, lock, siri, volume_up, volume_down, apple_pay",
+                                "enum": [
+                                    "home",
+                                    "lock",
+                                    "siri",
+                                    "volume_up",
+                                    "volume_down",
+                                    "apple_pay",
+                                ],
+                            },
+                        }
+                    ),
                     "required": ["button"],
                 },
             ),
             Tool(
                 name="shake",
                 description="Trigger a shake gesture on the simulator (useful for 'shake to undo' or debug menus)",
-                inputSchema={"type": "object", "properties": {}},
+                inputSchema={
+                    "type": "object",
+                    "properties": _with_udid(),
+                },
             ),
             # App Management
             Tool(
@@ -174,12 +239,14 @@ def create_server() -> Server:
                 description="Launch an app by its bundle ID (e.g., 'com.thefreeride.rider.dev' for Rider dev app)",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "bundle_id": {
-                            "type": "string",
-                            "description": "Bundle ID of the app to launch",
-                        },
-                    },
+                    "properties": _with_udid(
+                        {
+                            "bundle_id": {
+                                "type": "string",
+                                "description": "Bundle ID of the app to launch",
+                            },
+                        }
+                    ),
                     "required": ["bundle_id"],
                 },
             ),
@@ -188,12 +255,14 @@ def create_server() -> Server:
                 description="Terminate (kill) a running app",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "bundle_id": {
-                            "type": "string",
-                            "description": "Bundle ID of the app to terminate",
-                        },
-                    },
+                    "properties": _with_udid(
+                        {
+                            "bundle_id": {
+                                "type": "string",
+                                "description": "Bundle ID of the app to terminate",
+                            },
+                        }
+                    ),
                     "required": ["bundle_id"],
                 },
             ),
@@ -202,12 +271,14 @@ def create_server() -> Server:
                 description="Install an app from a .app bundle path",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "app_path": {
-                            "type": "string",
-                            "description": "Path to the .app bundle",
-                        },
-                    },
+                    "properties": _with_udid(
+                        {
+                            "app_path": {
+                                "type": "string",
+                                "description": "Path to the .app bundle",
+                            },
+                        }
+                    ),
                     "required": ["app_path"],
                 },
             ),
@@ -216,12 +287,14 @@ def create_server() -> Server:
                 description="Uninstall an app by bundle ID",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "bundle_id": {
-                            "type": "string",
-                            "description": "Bundle ID of the app to uninstall",
-                        },
-                    },
+                    "properties": _with_udid(
+                        {
+                            "bundle_id": {
+                                "type": "string",
+                                "description": "Bundle ID of the app to uninstall",
+                            },
+                        }
+                    ),
                     "required": ["bundle_id"],
                 },
             ),
@@ -230,12 +303,14 @@ def create_server() -> Server:
                 description="Open a URL in the simulator. Useful for testing deep links (e.g., 'ridecircuit://ride/123')",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "URL to open (can be http://, https://, or custom scheme)",
-                        },
-                    },
+                    "properties": _with_udid(
+                        {
+                            "url": {
+                                "type": "string",
+                                "description": "URL to open (can be http://, https://, or custom scheme)",
+                            },
+                        }
+                    ),
                     "required": ["url"],
                 },
             ),
@@ -245,17 +320,22 @@ def create_server() -> Server:
                 description="Set the simulator's GPS location. Essential for testing location-based features like ride pickup/dropoff",
                 inputSchema={
                     "type": "object",
-                    "properties": {
-                        "latitude": {"type": "number", "description": "Latitude coordinate"},
-                        "longitude": {"type": "number", "description": "Longitude coordinate"},
-                    },
+                    "properties": _with_udid(
+                        {
+                            "latitude": {"type": "number", "description": "Latitude coordinate"},
+                            "longitude": {"type": "number", "description": "Longitude coordinate"},
+                        }
+                    ),
                     "required": ["latitude", "longitude"],
                 },
             ),
             Tool(
                 name="clear_location",
                 description="Clear the simulated GPS location, returning to default behavior",
-                inputSchema={"type": "object", "properties": {}},
+                inputSchema={
+                    "type": "object",
+                    "properties": _with_udid(),
+                },
             ),
             # Utility
             Tool(
@@ -279,6 +359,28 @@ def create_server() -> Server:
         """Handle tool calls."""
         global simulator
 
+        def require_simulator(auto_boot: bool = False) -> list[TextContent] | None:
+            """Bind to an explicit or currently Booted simulator UDID.
+
+            Returns an error payload when no usable simulator is available,
+            otherwise None and leaves simulator.udid pointing at a live device.
+            """
+            udid = arguments.get("udid")
+            success, msg = simulator.ensure_ready(auto_boot=auto_boot, udid=udid)
+            if success:
+                return None
+            if udid or "Multiple simulators" in msg or auto_boot:
+                return [TextContent(type="text", text=msg)]
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        "No simulator connected. Pass udid, use list_device_udids, "
+                        "or call boot_simulator first."
+                    ),
+                )
+            ]
+
         try:
             # Simulator Management
             if name == "list_simulators":
@@ -288,7 +390,6 @@ def create_server() -> Server:
                 else:
                     devices = simulator.list_simulators()
 
-                # Format output nicely
                 if not devices:
                     return [TextContent(type="text", text="No simulators found")]
 
@@ -303,17 +404,23 @@ def create_server() -> Server:
 
                 return [TextContent(type="text", text="\n".join(lines))]
 
+            elif name == "list_device_udids":
+                payload = simulator.list_device_udids()
+                return [TextContent(type="text", text=json.dumps(payload, indent=2))]
+
             elif name == "boot_simulator":
+                udid = arguments.get("udid")
                 device_name = arguments.get("device_name")
-                success, message = simulator.find_and_boot_simulator(device_name)
+                if udid:
+                    success, message = simulator.boot_simulator(udid)
+                else:
+                    success, message = simulator.find_and_boot_simulator(device_name)
                 return [TextContent(type="text", text=message)]
 
             elif name == "get_device_info":
-                if not simulator.udid:
-                    # Try to auto-connect to a booted simulator
-                    success, msg = simulator.find_and_boot_simulator()
-                    if not success:
-                        return [TextContent(type="text", text=f"No simulator connected. {msg}")]
+                error = require_simulator(auto_boot=True)
+                if error:
+                    return error
 
                 info = simulator.get_device_info()
                 if info:
@@ -322,50 +429,53 @@ def create_server() -> Server:
 
             # Screenshots and UI
             elif name == "screenshot":
-                # Auto-connect if needed
-                if not simulator.udid:
-                    success, msg = simulator.find_and_boot_simulator()
-                    if not success:
-                        return [TextContent(type="text", text=f"No simulator available: {msg}")]
+                error = require_simulator(auto_boot=True)
+                if error:
+                    return error
 
                 success, result = simulator.screenshot_base64()
                 if success:
                     return [
                         ImageContent(type="image", data=result, mimeType="image/jpeg"),
-                        TextContent(type="text", text="Screenshot captured successfully"),
+                        TextContent(
+                            type="text",
+                            text=f"Screenshot captured successfully (udid={simulator.udid})",
+                        ),
                     ]
                 return [TextContent(type="text", text=f"Screenshot failed: {result}")]
 
             elif name == "get_ui_hierarchy":
-                if not simulator.udid:
-                    success, msg = simulator.find_and_boot_simulator()
-                    if not success:
-                        return [TextContent(type="text", text=f"No simulator available: {msg}")]
+                error = require_simulator(auto_boot=True)
+                if error:
+                    return error
 
                 success, result = simulator.get_ui_hierarchy()
                 if success:
-                    if isinstance(result, dict) or isinstance(result, list):
+                    if isinstance(result, (dict, list)):
                         return [TextContent(type="text", text=json.dumps(result, indent=2))]
                     return [TextContent(type="text", text=str(result))]
                 return [TextContent(type="text", text=f"Failed to get UI hierarchy: {result}")]
 
             # Interactions
             elif name == "tap":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 success, message = simulator.tap(arguments["x"], arguments["y"])
                 return [TextContent(type="text", text=message)]
 
             elif name == "long_press":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 duration = arguments.get("duration", 1.0)
                 success, message = simulator.long_press(arguments["x"], arguments["y"], duration)
                 return [TextContent(type="text", text=message)]
 
             elif name == "swipe":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 duration = arguments.get("duration", 0.5)
                 success, message = simulator.swipe(
                     arguments["x_start"],
@@ -377,82 +487,85 @@ def create_server() -> Server:
                 return [TextContent(type="text", text=message)]
 
             elif name == "type_text":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 success, message = simulator.type_text(arguments["text"])
                 return [TextContent(type="text", text=message)]
 
             elif name == "tap_and_type":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 success, message = simulator.tap_and_type(
                     arguments["x"], arguments["y"], arguments["text"]
                 )
                 return [TextContent(type="text", text=message)]
 
             elif name == "press_button":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 success, message = simulator.press_button(arguments["button"])
                 return [TextContent(type="text", text=message)]
 
             elif name == "shake":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 success, message = simulator.shake()
                 return [TextContent(type="text", text=message)]
 
             # App Management
             elif name == "launch_app":
-                if not simulator.udid:
-                    success, msg = simulator.find_and_boot_simulator()
-                    if not success:
-                        return [TextContent(type="text", text=f"No simulator available: {msg}")]
+                error = require_simulator(auto_boot=True)
+                if error:
+                    return error
                 success, message = simulator.launch_app(arguments["bundle_id"])
                 return [TextContent(type="text", text=message)]
 
             elif name == "terminate_app":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 success, message = simulator.terminate_app(arguments["bundle_id"])
                 return [TextContent(type="text", text=message)]
 
             elif name == "install_app":
-                if not simulator.udid:
-                    success, msg = simulator.find_and_boot_simulator()
-                    if not success:
-                        return [TextContent(type="text", text=f"No simulator available: {msg}")]
+                error = require_simulator(auto_boot=True)
+                if error:
+                    return error
                 success, message = simulator.install_app(arguments["app_path"])
                 return [TextContent(type="text", text=message)]
 
             elif name == "uninstall_app":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 success, message = simulator.uninstall_app(arguments["bundle_id"])
                 return [TextContent(type="text", text=message)]
 
             elif name == "open_url":
-                if not simulator.udid:
-                    success, msg = simulator.find_and_boot_simulator()
-                    if not success:
-                        return [TextContent(type="text", text=f"No simulator available: {msg}")]
+                error = require_simulator(auto_boot=True)
+                if error:
+                    return error
                 success, message = simulator.open_url(arguments["url"])
                 return [TextContent(type="text", text=message)]
 
             # Location
             elif name == "set_location":
-                if not simulator.udid:
-                    success, msg = simulator.find_and_boot_simulator()
-                    if not success:
-                        return [TextContent(type="text", text=f"No simulator available: {msg}")]
+                error = require_simulator(auto_boot=True)
+                if error:
+                    return error
                 success, message = simulator.set_location(
                     arguments["latitude"], arguments["longitude"]
                 )
                 return [TextContent(type="text", text=message)]
 
             elif name == "clear_location":
-                if not simulator.udid:
-                    return [TextContent(type="text", text="No simulator connected. Use boot_simulator first.")]
+                error = require_simulator(auto_boot=False)
+                if error:
+                    return error
                 success, message = simulator.clear_location()
                 return [TextContent(type="text", text=message)]
 

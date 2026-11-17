@@ -107,17 +107,118 @@ class SimulatorController:
                 return True, f"Simulator {target_udid} already booted"
             return False, result.stderr
 
+    def list_device_udids(self) -> Dict[str, Any]:
+        """Return all and booted simulator summaries with UDIDs."""
+        def summarize(device: Dict[str, Any]) -> Dict[str, Any]:
+            return {
+                "name": device.get("name", "Unknown"),
+                "udid": device.get("udid", ""),
+                "state": device.get("state", "Unknown"),
+                "runtime": device.get("runtime", ""),
+            }
+
+        all_devices = [summarize(d) for d in self.list_simulators() if d.get("udid")]
+        booted = [d for d in all_devices if d.get("state") == "Booted"]
+        return {
+            "all": all_devices,
+            "booted": booted,
+            "booted_count": len(booted),
+            "all_count": len(all_devices),
+        }
+
+    def ensure_ready(
+        self,
+        auto_boot: bool = True,
+        udid: Optional[str] = None,
+    ) -> Tuple[bool, str]:
+        """Ensure self.udid points at a currently Booted simulator.
+
+        Prefer an explicit udid from the caller. Otherwise reuse a still-Booted
+        cached UDID. If the cache is stale, reconnect only when exactly one
+        simulator is Booted; when multiple are Booted the caller must pass udid.
+        Optionally boot a simulator when none are running.
+        """
+        booted = self.list_booted_simulators()
+        booted_by_udid = {d.get("udid"): d for d in booted if d.get("udid")}
+
+        if udid:
+            target = booted_by_udid.get(udid)
+            if target:
+                self.udid = udid
+                self._run_idb(["connect", self.udid])
+                return True, f"Using simulator: {target.get('name', udid)}"
+
+            if not auto_boot:
+                # Still select the requested device so callers see a clear target.
+                all_devices = self.list_simulators()
+                named = next((d for d in all_devices if d.get("udid") == udid), None)
+                if not named:
+                    return False, f"Unknown simulator UDID: {udid}"
+                self.udid = None
+                return False, (
+                    f"Simulator {named.get('name', udid)} ({udid}) is "
+                    f"{named.get('state', 'Unknown')}, not Booted"
+                )
+
+            success, message = self.boot_simulator(udid)
+            if success:
+                return True, message
+            return False, message
+
+        if self.udid and self.udid in booted_by_udid:
+            name = booted_by_udid[self.udid].get("name", self.udid)
+            return True, f"Using already booted simulator: {name}"
+
+        if len(booted) == 1:
+            previous = self.udid
+            target = booted[0]
+            self.udid = target["udid"]
+            self._run_idb(["connect", self.udid])
+            name = target.get("name", self.udid)
+            if previous:
+                return True, (
+                    f"Cached simulator {previous} is no longer Booted; "
+                    f"switched to {name}"
+                )
+            return True, f"Using already booted simulator: {name}"
+
+        if len(booted) > 1:
+            self.udid = None
+            names = ", ".join(
+                f"{d.get('name', 'Unknown')} ({d.get('udid')})" for d in booted
+            )
+            return False, (
+                "Multiple simulators are Booted; pass udid to select one. "
+                f"Booted: {names}. Use list_device_udids to inspect."
+            )
+
+        # Drop stale cache so callers do not keep targeting a Shutdown device.
+        self.udid = None
+        if not auto_boot:
+            return False, "No simulator connected"
+
+        return self.find_and_boot_simulator()
+
     def find_and_boot_simulator(self, device_name: Optional[str] = None) -> Tuple[bool, str]:
         """Find a suitable simulator and boot it.
 
         Priority:
-        1. Use already booted simulator
-        2. Boot simulator matching device_name if provided
-        3. Boot latest available iPhone
+        1. Keep the currently selected simulator if it is still Booted
+        2. Use another already booted simulator
+        3. Boot simulator matching device_name if provided
+        4. Boot latest available iPhone
         """
         # Check for already booted simulators
         booted = self.list_booted_simulators()
         if booted:
+            if self.udid:
+                for device in booted:
+                    if device.get("udid") == self.udid:
+                        self._run_idb(["connect", self.udid])
+                        return True, (
+                            f"Using already booted simulator: "
+                            f"{device.get('name', self.udid)}"
+                        )
             self.udid = booted[0]["udid"]
             # Ensure idb is connected
             self._run_idb(["connect", self.udid])
